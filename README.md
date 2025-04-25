@@ -43,7 +43,7 @@ The dataset consists of:
 
 This project uses:
 
-- **SigLIP models with patch size 16 and input resolutions of 212x212, 384x384, and 512x512**
+- **SigLIP models with patch size 16 and input resolutions of 224x224, 384x384, and 512x512**
 - FAISS for indexing and retrieval
 - Embeddings are extracted using `get_image_features()` for image search and `get_text_features()` for query matching
 - All image embeddings are L2-normalized and stored in a **1024-dim FAISS index**

@@ -2,6 +2,7 @@
 
 # 🏺 SigLIP-Image-Embedding
 
+---
 Multimodal search and benchmarking pipeline for a large dataset of pottery images using [SigLIP](https://arxiv.org/abs/2303.15343).  
 This project allows for natural language queries like:
 

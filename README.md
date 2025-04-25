@@ -48,7 +48,7 @@ This project uses:
 - Embeddings are extracted using `get_image_features()` for image search and `get_text_features()` for query matching
 - All image embeddings are L2-normalized and stored in a **1024-dim FAISS index**
 
-> ✅ Based on testing, **the so400m model at 384 resolution** strikes the best balance between precision, recall, and computational efficiency.
+> ✅ Based on testing, **the so400m model at 384 resolution** strikes the best balance between precision, recall, and computational efficiency for this dataset.
 
 ---
 

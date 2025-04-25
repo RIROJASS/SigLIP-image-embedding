@@ -1,0 +1,535 @@
+#Import packages
+!pip install datasets faiss-gpu git+https://github.com/NielsRogge/transformers.git@add_siglip sentencepiece
+​
+import sys
+import os
+import glob
+import torch
+import transformers
+from PIL import Image
+from transformers import AutoProcessor, SiglipModel, AutoImageProcessor, AutoModel, AutoTokenizer
+import faiss
+import numpy as np
+​
+device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+​
+model = SiglipModel.from_pretrained("google/siglip-base-patch16-224").to(device)
+processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
+#set project path and directory
+project_path  = '/blue/nicolas.gauthier/raul.rojas/MMAI'
+os.chdir(project_path)
+print(os.listdir(project_path))
+#data collection and verification
+image_path = '/blue/nicolas.gauthier/raul.rojas/MMAI/MuseumData'
+data = []
+data.extend(glob.glob(image_path+'/*.jpg'))
+data.extend(glob.glob(image_path+'/*.JPG'))
+print(len(data))
+print(data[2])
+​
+​
+image = Image.open(data[0])
+width = 300
+ratio = (width / float(image.size[0]))
+height = int((float(image.size[1]) * float(ratio)))
+img = image.resize((width, height), Image.Resampling.LANCZOS)
+display(img)
+#functions needed for embedding
+def add_vector(embedding, index):
+    vector = embedding.detach().cpu().numpy()
+    vector = np.float32(vector)
+    faiss.normalize_L2(vector)
+    index.add(vector)
+​
+def embed_siglip(image):
+    with torch.no_grad():
+        inputs = processor(images=image, return_tensors="pt", padding="max_length").to(device)
+        image_features = model.get_image_features(**inputs)
+        return image_features
+​
+def load_benchmark_imgs(benchmark_dir, pattern='*.jpg'):
+    return glob.glob(os.path.join(benchmark_dir, pattern))
+​
+# Function to compute precision and recall at k
+import os
+​
+def precision_recall_at_k(ground_truth, predictions, k):
+    predictions_k = predictions[:k]
+​
+    # Compare using base file names
+    ground_truth_basenames = {os.path.basename(p) for p in ground_truth}
+    prediction_basenames = {os.path.basename(p) for p in predictions_k}
+​
+    true_positives = ground_truth_basenames.intersection(prediction_basenames)
+    precision = len(true_positives) / len(predictions_k) if predictions_k else 0
+    recall = len(true_positives) / len(ground_truth_basenames) if ground_truth_basenames else 0
+    return true_positives, precision, recall
+​
+from PIL import Image
+import tqdm
+from tqdm import tqdm
+​
+​
+# initialize the index with the size matching of embeddings out from the model
+index = faiss.IndexFlatL2(1152)
+​
+# read the image and add vector
+for img_path in tqdm(data, desc="Embedding images"):
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * ratio))
+    image = image.resize((width, height), Image.Resampling.LANCZOS)
+    clip_features = embed_siglip(image)
+    add_vector(clip_features, index)
+#setting index variables
+faiss.write_index(index,"./siglip_70k.index")
+​
+index = faiss.read_index("./siglip_70k.index")
+#test run 1
+prompt="an image of a deer or mammal on a piece of pottery"
+​
+text_token = tokenizer([prompt], return_tensors="pt", padding="max_length").to(device)
+text_features = model.get_text_features(**text_token)
+​
+text_features = text_features.detach().cpu().numpy()
+text_features = np.float32(text_features)
+faiss.normalize_L2(text_features)
+​
+k=20
+distances, indices = index.search(text_features, k)
+​
+for idx in indices[0]:
+    img_path= data[idx]
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * float(ratio)))
+    img = image.resize((width, height), Image.Resampling.LANCZOS)
+    display(img)
+    print(img_path)
+boat
+#boat benchmark test
+prompt="an image of a boat"
+​
+text_token = tokenizer([prompt], return_tensors="pt", padding="max_length").to(device)
+text_features = model.get_text_features(**text_token)
+​
+text_features = text_features.detach().cpu().numpy()
+text_features = np.float32(text_features)
+faiss.normalize_L2(text_features)
+​
+k=10
+distances, indices = index.search(text_features, k)
+​
+for idx in indices[0]:
+    img_path= data[idx]
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * float(ratio)))
+    img = image.resize((width, height), Image.Resampling.LANCZOS)
+    display(img)
+    print(img_path)
+    
+#Actual benchmarks
+predicted_images = [data[idx] for idx in indices[0]]
+print(predicted_images)
+# Load the ground truth images for the "boat" category from your benchmarks folder
+boat_gt = load_benchmark_imgs('/blue/nicolas.gauthier/raul.rojas/MMAI/Benchmarks/boat')
+print(boat_gt)
+# Calculate precision and recall for the "boat" query
+true_positives, precision, recall = precision_recall_at_k(boat_gt, predicted_images, k)
+print(true_positives, precision, recall)
+#bird benchmark test
+prompt="an image of a bird"
+​
+text_token = tokenizer([prompt], return_tensors="pt", padding="max_length").to(device)
+text_features = model.get_text_features(**text_token)
+​
+text_features = text_features.detach().cpu().numpy()
+text_features = np.float32(text_features)
+faiss.normalize_L2(text_features)
+​
+k = 10
+distances, indices = index.search(text_features, k)
+​
+for idx in indices[0]:
+    img_path= data[idx]
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * float(ratio)))
+    img = image.resize((width, height), Image.Resampling.LANCZOS)
+    display(img)
+    print(img_path)
+    
+#Actual benchmarks
+predicted_images = [data[idx] for idx in indices[0]]
+print(predicted_images)
+# Load the ground truth images for the "bird" category from your benchmarks folder
+bird_gt = load_benchmark_imgs('/blue/nicolas.gauthier/raul.rojas/MMAI/Benchmarks/bird')
+print(bird_gt)
+# Calculate precision and recall for the "bird" query
+true_positives, precision, recall = precision_recall_at_k(bird_gt, predicted_images, k)
+print("Precision@{}: {:.2f}".format(k, precision))
+print("Recall@{}: {:.2f}".format(k, recall))
+an
+#human benchmark test
+prompt="an image of a human"
+​
+text_token = tokenizer([prompt], return_tensors="pt", padding="max_length").to(device)
+text_features = model.get_text_features(**text_token)
+​
+text_features = text_features.detach().cpu().numpy()
+text_features = np.float32(text_features)
+faiss.normalize_L2(text_features)
+​
+k = 10
+distances, indices = index.search(text_features, k)
+​
+for idx in indices[0]:
+    img_path= data[idx]
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * float(ratio)))
+    img = image.resize((width, height), Image.Resampling.LANCZOS)
+    display(img)
+    print(img_path)
+    
+#Actual benchmarks
+predicted_images = [data[idx] for idx in indices[0]]
+print(predicted_images)
+# Load the ground truth images for the "bird" category from your benchmarks folder
+human_gt = load_benchmark_imgs('/blue/nicolas.gauthier/raul.rojas/MMAI/Benchmarks/humans')
+print(human_gt)
+# Calculate precision and recall for the "bird" query
+true_positives, precision, recall = precision_recall_at_k(human_gt, predicted_images, k)
+print("Precision@{}: {:.2f}".format(k, precision))
+print("Recall@{}: {:.2f}".format(k, recall))
+mammal
+#mammal benchmark test
+prompt="an image of a mammal"
+​
+text_token = tokenizer([prompt], return_tensors="pt", padding="max_length").to(device)
+text_features = model.get_text_features(**text_token)
+​
+text_features = text_features.detach().cpu().numpy()
+text_features = np.float32(text_features)
+faiss.normalize_L2(text_features)
+​
+k = 10
+distances, indices = index.search(text_features, k)
+​
+for idx in indices[0]:
+    img_path= data[idx]
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * float(ratio)))
+    img = image.resize((width, height), Image.Resampling.LANCZOS)
+    display(img)
+    print(img_path)
+    
+#Actual benchmarks
+predicted_images = [data[idx] for idx in indices[0]]
+print(predicted_images)
+# Load the ground truth images for the "bird" category from your benchmarks folder
+mammal_gt = load_benchmark_imgs('/blue/nicolas.gauthier/raul.rojas/MMAI/Benchmarks/mammal')
+print(mammal_gt)
+# Calculate precision and recall for the "bird" query
+true_positives, precision, recall = precision_recall_at_k(mammal_gt, predicted_images, k)
+print("Precision@{}: {:.2f}".format(k, precision))
+print("Recall@{}: {:.2f}".format(k, recall))
+#collecting metrics from evaluations:
+results = {
+    'boat': {'precision': 0.10, 'recall': 1.00},
+    'bird': {'precision': 1.00, 'recall': 0.37},
+    'human': {'precision': 0.10, 'recall': 0.06},
+    'mammal': {'precision': 0.30, 'recall': 0.38},
+}
+​
+benchmarks = list(results.keys())
+precisions = [results[b]['precision'] for b in benchmarks]
+recalls = [results[b]['recall'] for b in benchmarks]
+​
+# matplotlib code to create grouped bar chart
+import matplotlib.pyplot as plt
+import numpy as np
+​
+x = np.arange(len(benchmarks))
+width = 0.35
+​
+fig, ax = plt.subplots(figsize=(8, 6))
+bars_precision = ax.bar(x - width/2, precisions, width, label='Precision')
+bars_recall    = ax.bar(x + width/2, recalls, width, label='Recall')
+​
+ax.set_ylabel('Scores')
+ax.set_title('Precision & Recall @10 for Each Benchmark: Model 384 (so400m)')
+ax.set_xticks(x)
+ax.set_xticklabels(benchmarks)
+ax.legend()
+​
+def autolabel(bars):
+    for bar in bars:
+        height = bar.get_height()
+        ax.annotate(f'{height:.2f}',
+                    xy=(bar.get_x() + bar.get_width()/2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom')
+                    
+autolabel(bars_precision)
+autolabel(bars_recall)
+​
+fig.tight_layout()
+plt.show()
+​
+# We’ll just color all points the same for now (you can color by label if you have them)
+
+# 3D UMAP EMBEDDING + MATPLOTLIB VISUALIZATION (test w/100 embeddings)
+​
+# 1. Gather embeddings in a NumPy array
+# (we assume you've defined `data`, the list of image paths,
+#  and have the `embed_siglip` function, model, processor, and device in scope
+#  from your existing code.)
+​
+#import packages
+%matplotlib inline
+!pip install umap-learn
+!pip install bokeh
+​
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import umap
+import umap.umap_ as umap
+import tqdm
+from sklearn.datasets import load_digits
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from mpl_toolkits.mplot3d import Axes3D
+from tqdm import tqdm
+​
+#setting up variables and verifying data
+image_path = '/blue/nicolas.gauthier/raul.rojas/MMAI/MuseumData'
+data = []
+data.extend(glob.glob(image_path+'/*.jpg'))
+data.extend(glob.glob(image_path+'/*.JPG'))
+print(len(data))
+data = data[:100]
+print(len(data))
+​
+# embeddings collection
+all_embeddings = []
+for img_path in tqdm(data, desc="Embedding images"):
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * ratio))
+    image = image.resize((width, height), Image.Resampling.LANCZOS)
+    with torch.no_grad():
+        image_features = embed_siglip(image)
+    # Move to CPU numpy float32
+    embedding_vector = image_features.detach().cpu().numpy().astype(np.float32)
+    # Optional: L2 normalize each embedding
+    faiss.normalize_L2(embedding_vector)
+    all_embeddings.append(embedding_vector[0])
+​
+# gather embeddings into shape [num_images, embedding_dim]
+all_embeddings = np.vstack(all_embeddings)
+​
+# 3 component UMAP(for 3D embedding)
+reducer_3d = umap.UMAP(n_components=3, random_state=42)
+print(reducer_3d)
+embedding_3d = reducer_3d.fit_transform(all_embeddings)  # shape: [num_images, 3]
+print(embedding_3d)
+print(embedding_3d.shape)
+​
+​
+# plot 3D embedding via matplotlib
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+​
+# We’ll just color all points the same for now (you can color by label if you have them)
+ax.scatter(
+    embedding_3d[:, 0],
+    embedding_3d[:, 1],
+    embedding_3d[:, 2],
+    s=5
+)
+​
+ax.set_xlabel('UMAP-1')
+ax.set_ylabel('UMAP-2')
+ax.set_zlabel('UMAP-3')
+ax.set_title('3D UMAP Embedding of Images')
+​
+plt.savefig("umap_3d_plot.png")
+plt.show()
+# 3. Plot the 3D embedding via matplotlib
+
+# 3D UMAP EMBEDDING + MATPLOTLIB VISUALIZATION (full datatest)
+​
+# 1. Gather embeddings in a NumPy array
+# (we assume you've defined `data`, the list of image paths,
+#  and have the `embed_siglip` function, model, processor, and device in scope
+#  from existing code)
+​
+#import packages
+from sklearn.datasets import load_digits
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import umap
+import umap.umap_ as umap
+import tqdm
+from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D plotting
+from tqdm import tqdm
+%matplotlib inline
+​
+​
+#setting up variables and verifying data
+image_path = '/blue/nicolas.gauthier/raul.rojas/MMAI/MuseumData'
+data = []
+data.extend(glob.glob(image_path+'/*.jpg'))
+data.extend(glob.glob(image_path+'/*.JPG'))
+print(len(data))
+​
+# embeddings collection
+all_embeddings = []
+for img_path in tqdm(data, desc="Embedding images"):
+    image = Image.open(img_path)
+    width = 300
+    ratio = (width / float(image.size[0]))
+    height = int((float(image.size[1]) * ratio))
+    image = image.resize((width, height), Image.Resampling.LANCZOS)
+    with torch.no_grad():
+        image_features = embed_siglip(image)
+    # Move to CPU numpy float32
+    embedding_vector = image_features.detach().cpu().numpy().astype(np.float32)
+    # Optional: L2 normalize each embedding
+    faiss.normalize_L2(embedding_vector)
+    all_embeddings.append(embedding_vector[0])
+​
+# gather embeddings into shape [num_images, embedding_dim]
+all_embeddings = np.vstack(all_embeddings)
+​
+# 3 component UMAP(for 3D embedding)
+reducer_3d = umap.UMAP(n_components=3, random_state=42)
+print(reducer_3d)
+embedding_3d = reducer_3d.fit_transform(all_embeddings)  # shape: [num_images, 3]
+print(embedding_3d)
+print(embedding_3d.shape)
+​
+​
+# plot 3D embedding via matplotlib
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+​
+# We’ll just color all points the same for now (you can color by label if you have them)
+ax.scatter(
+    embedding_3d[:, 0],
+    embedding_3d[:, 1],
+    embedding_3d[:, 2],
+    s=5
+)
+​
+ax.set_xlabel('UMAP-1')
+ax.set_ylabel('UMAP-2')
+ax.set_zlabel('UMAP-3')
+ax.set_title('3D UMAP Embedding of Images')
+​
+plt.savefig("umap_3d_plot.png")
+plt.show()
+# version check
+import nbformat
+print(nbformat.__version__)
+#upgrade if needed
+#%pip install --upgrade nbformat
+5.10.4
+and show 
+# Interactive 3D UMAP Visualization with Plotly
+​
+# Requirements (run in a cell above if not installed):
+!pip install plotly
+!pip install --upgrade nbformat
+!pip install --user jupyterlab
+​
+​
+# Assumes:
+#   1) You have the following in your notebook scope:
+#       - data             (list of image file paths)
+#       - all_embeddings   (NumPy array of shape [num_images, embedding_dim])
+#       - embedding_3d     (UMAP output of shape [num_images, 3])
+#   2) You're in an environment that can display Plotly (e.g., Jupyter Notebook).
+​
+import pandas as pd
+import plotly.io as pio
+​
+#dataframe using 3D UMAP coordinates
+df = pd.DataFrame(embedding_3d, columns=["UMAP-1", "UMAP-2", "UMAP-3"])
+​
+#add file paths under "filename" column to data
+df["filename"] = data
+​
+#(optional) high-dimensional embeddings -> truncated string for easier inspection in tooltip
+shortened_embeddings = []
+for emb in all_embeddings:
+    # Just show the first 5 values to keep the hover text compact
+    short_str = ", ".join(f"{val:.2f}" for val in emb[:5])
+    shortened_embeddings.append(f"[{short_str}, ...]")
+​
+df["embeddings"] = shortened_embeddings
+​
+#build and show interactive 3d scatter plot of with Plotly
+fig = px.scatter_3d(
+    df,
+    x="UMAP-1",
+    y="UMAP-2",
+    z="UMAP-3",
+    hover_data=["filename", "embeddings"],  # show these in the tooltip
+    title="3D UMAP Embedding of Images (Interactive Hover)"
+)
+​
+# 5. Display the figure
+fig.show()
+​
+################################################################################
+# Force a Plotly Renderer & Fallback to HTML if it fails
+#
+# 1. Set a renderer that doesn't require JupyterLab detection ("iframe", "browser", etc.)
+# 2. If it fails, write to an HTML file that you can open locally to see the interactive plot.
+#
+# Assumes:
+#   - You've already created a Plotly figure named `fig` (like `fig = px.scatter_3d(...)`)
+#   - You're in the same notebook environment.
+################################################################################
+
+# Force a Plotly Renderer & Fallback to HTML if it fails
+#
+# 1. Set a renderer that doesn't require JupyterLab detection ("iframe", "browser", etc.)
+# 2. If it fails, write to an HTML file that you can open locally to see the interactive plot.
+#
+# Assumes:
+#   - You've already created a Plotly figure named `fig` (like `fig = px.scatter_3d(...)`)
+#   - You're in the same notebook environment.
+​
+import plotly.io as pio
+​
+# Choose a renderer that often works without JupyterLab checks, e.g. "iframe"
+pio.renderers.default = "iframe"
+​
+try:
+    fig.show()  # Attempt inline display
+except Exception as e:
+    print("Inline renderer failed. Error was:\n", e)
+    # As a fallback, write to an HTML file:
+    fig.write_html("umap_3d_interactive.html")
+    print("Plot saved to 'umap_3d_interactive.html'. Please open that file in a browser to view.")
+​
